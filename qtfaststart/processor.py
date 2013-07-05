@@ -44,11 +44,24 @@ def get_index(datastream):
 
         The tuple elements will be in the order that they appear in the file.
     """
-    index = []
-
     log.debug("Getting index of top level atoms...")
 
-    # Read atoms until we catch an error
+    index = list(_read_atoms(datastream))
+
+    # Make sure the atoms we need exist
+    top_level_atoms = set([item[0] for item in index])
+    for key in ["moov", "mdat"]:
+        if key not in top_level_atoms:
+            log.error("%s atom not found, is this a valid MOV/MP4 file?" % key)
+            raise FastStartException()
+
+    return index
+
+
+def _read_atoms(datastream):
+    """
+    Read atoms until an error occurs
+    """
     while(datastream):
         try:
             skip = 8
@@ -60,7 +73,7 @@ def get_index(datastream):
         except:
             break
 
-        index.append((atom_type, datastream.tell() - skip, atom_size))
+        yield (atom_type, datastream.tell() - skip, atom_size)
 
         if atom_size == 0:
             if atom_type == "mdat":
@@ -73,15 +86,6 @@ def get_index(datastream):
                 atom_size = skip
 
         datastream.seek(atom_size - skip, os.SEEK_CUR)
-
-    # Make sure the atoms we need exist
-    top_level_atoms = set([item[0] for item in index])
-    for key in ["moov", "mdat"]:
-        if key not in top_level_atoms:
-            log.error("%s atom not found, is this a valid MOV/MP4 file?" % key)
-            raise FastStartException()
-
-    return index
 
 
 def find_atoms(size, datastream):
