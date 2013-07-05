@@ -148,21 +148,21 @@ def process(infilename, outfilename, limit=0):
     free_size = 0
 
     # Make sure moov occurs AFTER mdat, otherwise no need to run!
-    for atom, pos, size in index:
+    for atom in index:
         # The atoms are guaranteed to exist from get_index above!
-        if atom == "moov":
-            moov_pos = pos
-            moov_size = size
-        elif atom == "mdat":
-            mdat_pos = pos
-        elif atom == "free" and pos < mdat_pos:
+        if atom.name == "moov":
+            moov_pos = atom.position
+            moov_size = atom.size
+        elif atom.name == "mdat":
+            mdat_pos = atom.position
+        elif atom.name == "free" and atom.position < mdat_pos:
             # This free atom is before the mdat!
-            free_size += size
-            log.info("Removing free atom at %d (%d bytes)" % (pos, size))
-        elif atom == "\x00\x00\x00\x00" and pos < mdat_pos:
+            free_size += atom.size
+            log.info("Removing free atom at %d (%d bytes)" % (atom.position, atom.size))
+        elif atom.name == "\x00\x00\x00\x00" and atom.position < mdat_pos:
             # This is some strange zero atom with incorrect size
             free_size += 8
-            log.info("Removing strange zero atom at %s (8 bytes)" % pos)
+            log.info("Removing strange zero atom at %s (8 bytes)" % atom.position)
 
     # Offset to shift positions
     offset = moov_size - free_size
@@ -204,10 +204,10 @@ def process(infilename, outfilename, limit=0):
     outfile = open(outfilename, "wb")
 
     # Write ftype
-    for atom, pos, size in index:
-        if atom == "ftyp":
-            datastream.seek(pos)
-            outfile.write(datastream.read(size))
+    for atom in index:
+        if atom.name == "ftyp":
+            datastream.seek(atom.position)
+            outfile.write(datastream.read(atom.size))
 
     # Write moov
     moov.seek(0)
@@ -215,21 +215,21 @@ def process(infilename, outfilename, limit=0):
 
     # Write the rest
     written = 0
-    atoms = [item for item in index if item[0] not in ["ftyp", "moov", "free"]]
-    for atom, pos, size in atoms:
-        datastream.seek(pos)
+    atoms = [item for item in index if item.name not in ["ftyp", "moov", "free"]]
+    for atom in atoms:
+        datastream.seek(atom.position)
 
         # Write in chunks to not use too much memory
-        for x in range(size // CHUNK_SIZE):
+        for x in range(atom.size // CHUNK_SIZE):
             outfile.write(datastream.read(CHUNK_SIZE))
             written += CHUNK_SIZE
             if limit and written >= limit:
                 # A limit was set and we've just passed it, stop writing!
                 break
 
-        if size % CHUNK_SIZE:
-            outfile.write(datastream.read(size % CHUNK_SIZE))
-            written += (size % CHUNK_SIZE)
+        if atom.size % CHUNK_SIZE:
+            outfile.write(datastream.read(atom.size % CHUNK_SIZE))
+            written += (atom.size % CHUNK_SIZE)
             if limit and written >= limit:
                 # A limit was set and we've just passed it, stop writing!
                 break
