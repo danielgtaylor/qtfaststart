@@ -6,6 +6,7 @@
 import logging
 import os
 import struct
+import collections
 
 import io
 
@@ -18,6 +19,8 @@ log = logging.getLogger("qtfaststart")
 # Older versions of Python require this to be defined
 if not hasattr(os, 'SEEK_CUR'):
     os.SEEK_CUR = 1
+
+Atom = collections.namedtuple('Atom', 'name position size')
 
 def read_atom(datastream):
     """
@@ -49,7 +52,7 @@ def get_index(datastream):
     index = list(_read_atoms(datastream))
 
     # Make sure the atoms we need exist
-    top_level_atoms = set([item[0] for item in index])
+    top_level_atoms = set([item.name for item in index])
     for key in ["moov", "mdat"]:
         if key not in top_level_atoms:
             log.error("%s atom not found, is this a valid MOV/MP4 file?" % key)
@@ -73,7 +76,7 @@ def _read_atoms(datastream):
         except:
             break
 
-        yield (atom_type, datastream.tell() - skip, atom_size)
+        yield Atom(atom_type, datastream.tell() - skip, atom_size)
 
         if atom_size == 0:
             if atom_type == "mdat":
