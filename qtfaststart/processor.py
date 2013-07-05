@@ -7,7 +7,7 @@ import logging
 import os
 import struct
 
-from StringIO import StringIO
+import io
 
 from qtfaststart.exceptions import FastStartException
 
@@ -161,7 +161,7 @@ def process(infilename, outfilename, limit=0):
 
     # Read and fix moov
     datastream.seek(moov_pos)
-    moov = StringIO(datastream.read(moov_size))
+    moov = io.BytesIO(datastream.read(moov_size))
 
     # Ignore moov identifier and size, start reading children
     moov.seek(8)
