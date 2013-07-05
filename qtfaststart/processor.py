@@ -33,6 +33,15 @@ def read_atom(datastream):
     return size, type
 
 
+def _read_atom_ex(datastream):
+    """
+    Read an Atom from datastream
+    """
+    pos = datastream.tell()
+    atom_size, atom_type = read_atom(datastream)
+    return Atom(atom_type, pos, atom_size)
+
+
 def get_index(datastream):
     """
         Return an index of top level atoms, their absolute byte-position in the
@@ -114,20 +123,20 @@ def find_atoms(size, datastream):
 
     while datastream.tell() < stop:
         try:
-            atom_size, atom_type = read_atom(datastream)
+            atom = _read_atom_ex(datastream)
         except:
             log.exception("Error reading next atom!")
             raise FastStartException()
 
-        if atom_type in ["trak", "mdia", "minf", "stbl"]:
+        if atom.name in ["trak", "mdia", "minf", "stbl"]:
             # Known ancestor atom of stco or co64, search within it!
-            for atype in find_atoms(atom_size - 8, datastream):
-                yield atype
-        elif atom_type in ["stco", "co64"]:
-            yield atom_type
+            for res in find_atoms(atom.size - 8, datastream):
+                yield res
+        elif atom.name in ["stco", "co64"]:
+            yield atom.name
         else:
             # Ignore this atom, seek to the end of it.
-            datastream.seek(atom_size - 8, os.SEEK_CUR)
+            datastream.seek(atom.size - 8, os.SEEK_CUR)
 
 
 def process(infilename, outfilename, limit=0):
