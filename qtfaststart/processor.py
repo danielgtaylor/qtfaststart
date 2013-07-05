@@ -238,14 +238,17 @@ def _patch_moov(datastream, atom, offset):
 
         log.info("Patching %s with %d entries" % (atom.name, entry_count))
 
+        entries_pos = moov.tell()
+
+        struct_fmt = ">%(entry_count)s%(ctype)s" % vars()
+
         # Read entries
-        entries = struct.unpack(">" + ctype * entry_count,
-                                moov.read(csize * entry_count))
+        entries = struct.unpack(struct_fmt, moov.read(csize * entry_count))
 
         # Patch and write entries
-        moov.seek(-csize * entry_count, os.SEEK_CUR)
-        moov.write(struct.pack(">" + ctype * entry_count,
-                               *[entry + offset for entry in entries]))
+        offset_entries = [entry + offset for entry in entries]
+        moov.seek(entries_pos)
+        moov.write(struct.pack(struct_fmt, *offset_entries))
     return moov
 
 def get_chunks(stream, chunk_size, limit):
