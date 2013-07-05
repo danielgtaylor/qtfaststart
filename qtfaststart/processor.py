@@ -220,7 +220,7 @@ def process(infilename, outfilename, limit=0):
         datastream.seek(pos)
 
         # Write in chunks to not use too much memory
-        for x in range(size / CHUNK_SIZE):
+        for x in range(size // CHUNK_SIZE):
             outfile.write(datastream.read(CHUNK_SIZE))
             written += CHUNK_SIZE
             if limit and written >= limit:
