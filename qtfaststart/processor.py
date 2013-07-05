@@ -50,13 +50,7 @@ def get_index(datastream):
     log.debug("Getting index of top level atoms...")
 
     index = list(_read_atoms(datastream))
-
-    # Make sure the atoms we need exist
-    top_level_atoms = set([item.name for item in index])
-    for key in ["moov", "mdat"]:
-        if key not in top_level_atoms:
-            log.error("%s atom not found, is this a valid MOV/MP4 file?" % key)
-            raise FastStartException()
+    _ensure_valid_index(index)
 
     return index
 
@@ -89,6 +83,19 @@ def _read_atoms(datastream):
                 atom_size = skip
 
         datastream.seek(atom_size - skip, os.SEEK_CUR)
+
+
+def _ensure_valid_index(index):
+    """
+    Ensure the minimum viable atoms are present in the index.
+
+    Raise FastStartException if not.
+    """
+    top_level_atoms = set([item.name for item in index])
+    for key in ["moov", "mdat"]:
+        if key not in top_level_atoms:
+            log.error("%s atom not found, is this a valid MOV/MP4 file?" % key)
+            raise FastStartException()
 
 
 def find_atoms(size, datastream):
