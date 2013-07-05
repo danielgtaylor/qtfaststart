@@ -25,7 +25,9 @@ def read_atom(datastream):
         in bytes (including the 8 bytes already read) and type is a "fourcc"
         like "ftyp" or "moov".
     """
-    return struct.unpack(">L4s", datastream.read(8))
+    size, type = struct.unpack(">L4s", datastream.read(8))
+    type = type.decode('ascii')
+    return size, type
 
 
 def get_index(datastream):
