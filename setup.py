@@ -1,4 +1,8 @@
-from distutils.core import setup
+try:
+    from setuptools import setup
+except ImportError:
+    from distutils.core import setup
+
 import qtfaststart
 
 long_description = open('README.txt').read()
