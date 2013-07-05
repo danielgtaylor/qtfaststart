@@ -228,7 +228,10 @@ def _patch_moov(datastream, atom, offset):
 
     for atom in _find_atoms_ex(atom, moov):
         # Read either 32-bit or 64-bit offsets
-        ctype, csize = atom.name == "stco" and ("L", 4) or ("Q", 8)
+        ctype, csize = dict(
+            stco=('L', 4),
+            co64=('Q', 8),
+        )[atom.name]
 
         # Get number of entries
         version, entry_count = struct.unpack(">2L", moov.read(8))
