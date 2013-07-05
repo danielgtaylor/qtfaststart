@@ -39,6 +39,8 @@ def _read_atom_ex(datastream):
     """
     pos = datastream.tell()
     atom_size, atom_type = read_atom(datastream)
+    if atom_size == 1:
+        atom_size, = struct.unpack(">Q", datastream.read(8))
     return Atom(atom_type, pos, atom_size)
 
 
@@ -70,28 +72,24 @@ def _read_atoms(datastream):
     """
     while(datastream):
         try:
-            skip = 8
-            atom_size, atom_type = read_atom(datastream)
-            if atom_size == 1:
-                atom_size = struct.unpack(">Q", datastream.read(8))[0]
-                skip = 16
-            log.debug("%s: %s" % (atom_type, atom_size))
+            atom = _read_atom_ex(datastream)
+            log.debug("%s: %s" % (atom.name, atom.size))
         except:
             break
 
-        yield Atom(atom_type, datastream.tell() - skip, atom_size)
+        yield atom
 
-        if atom_size == 0:
-            if atom_type == "mdat":
+        if atom.size == 0:
+            if atom.name == "mdat":
                 # Some files may end in mdat with no size set, which generally
                 # means to seek to the end of the file. We can just stop indexing
                 # as no more entries will be found!
                 break
             else:
                 # Weird, but just continue to try to find more atoms
-                atom_size = skip
+                continue
 
-        datastream.seek(atom_size - skip, os.SEEK_CUR)
+        datastream.seek(atom.position + atom.size)
 
 
 def _ensure_valid_index(index):
