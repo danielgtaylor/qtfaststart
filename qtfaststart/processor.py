@@ -168,8 +168,8 @@ def process(infilename, outfilename, limit=0):
     for atom in index:
         # The atoms are guaranteed to exist from get_index above!
         if atom.name == "moov":
+            moov_atom = atom
             moov_pos = atom.position
-            moov_size = atom.size
         elif atom.name == "mdat":
             mdat_pos = atom.position
         elif atom.name == "free" and atom.position < mdat_pos:
@@ -182,31 +182,31 @@ def process(infilename, outfilename, limit=0):
             log.info("Removing strange zero atom at %s (8 bytes)" % atom.position)
 
     # Offset to shift positions
-    offset = moov_size - free_size
+    offset = moov_atom.size - free_size
 
     if moov_pos < mdat_pos:
         # moov appears to be in the proper place, don't shift by moov size
-        offset -= moov_size
+        offset -= moov_atom.size
         if not free_size:
             # No free atoms and moov is correct, we are done!
             log.error("This file appears to already be setup for streaming!")
             raise FastStartException()
 
     # Read and fix moov
-    datastream.seek(moov_pos)
-    moov = io.BytesIO(datastream.read(moov_size))
+    datastream.seek(moov_atom.position)
+    moov = io.BytesIO(datastream.read(moov_atom.size))
 
-    # Ignore moov identifier and size, start reading children
-    moov.seek(8)
+    # reload the moov_atom from the fixed stream
+    moov_atom = _read_atom_ex(moov)
 
-    for atom_type in find_atoms(moov_size - 8, moov):
+    for atom in _find_atoms_ex(moov_atom, moov):
         # Read either 32-bit or 64-bit offsets
-        ctype, csize = atom_type == "stco" and ("L", 4) or ("Q", 8)
+        ctype, csize = atom.name == "stco" and ("L", 4) or ("Q", 8)
 
         # Get number of entries
         version, entry_count = struct.unpack(">2L", moov.read(8))
 
-        log.info("Patching %s with %d entries" % (atom_type, entry_count))
+        log.info("Patching %s with %d entries" % (atom.name, entry_count))
 
         # Read entries
         entries = struct.unpack(">" + ctype * entry_count,
