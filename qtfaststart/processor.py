@@ -227,8 +227,7 @@ def process(infilename, outfilename, limit=float('inf')):
             outfile.write(datastream.read(atom.size))
 
     # Write moov
-    moov.seek(0)
-    outfile.write(moov.read())
+    outfile.write(moov.getvalue())
 
     # Write the rest
     atoms = [item for item in index if item.name not in ["ftyp", "moov", "free"]]
