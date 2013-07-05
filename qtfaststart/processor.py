@@ -100,14 +100,15 @@ def _ensure_valid_index(index):
 
 def find_atoms(size, datastream):
     """
-        This function is a generator that will yield either "stco" or "co64"
-        when either atom is found. datastream can be assumed to be 8 bytes
-        into the stco or co64 atom when the value is yielded.
+        Yield either "stco" or "co64" chunks from datastream.
+        datastream will be 8 bytes into the stco or co64 atom when the value
+        is yielded.
 
         It is assumed that datastream will be at the end of the atom after
         the value has been yielded and processed.
 
-        size is the number of bytes to the end of the atom in the datastream.
+        size is the number of bytes to the end of the parent atom in the
+        datastream.
     """
     stop = datastream.tell() + size
 
