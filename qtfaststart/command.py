@@ -13,9 +13,6 @@ import shutil
 import sys
 import tempfile
 
-# Add parent directory to sys.path so that running from dev environment works
-sys.path.append(os.path.dirname(os.path.dirname((os.path.abspath(__file__)))))
-
 from optparse import OptionParser
 from qtfaststart import VERSION
 from qtfaststart import processor
@@ -23,7 +20,7 @@ from qtfaststart.exceptions import FastStartException
 
 log = logging.getLogger("qtfaststart")
 
-if __name__ == "__main__":
+def run():
     logging.basicConfig(level = logging.INFO, stream = sys.stdout,
                         format = "%(message)s")
 
