@@ -70,7 +70,7 @@ def _read_atoms(datastream):
     """
     Read atoms until an error occurs
     """
-    while(datastream):
+    while datastream:
         try:
             atom = _read_atom_ex(datastream)
             log.debug("%s: %s" % (atom.name, atom.size))
