@@ -146,7 +146,7 @@ def _find_atoms_ex(parent_atom, datastream):
             datastream.seek(atom.position + atom.size)
 
 
-def process(infilename, outfilename, limit=0):
+def process(infilename, outfilename, limit=float('inf')):
     """
         Convert a Quicktime/MP4 file for streaming by moving the metadata to
         the front of the file. This method writes a new file.
@@ -231,22 +231,22 @@ def process(infilename, outfilename, limit=0):
     outfile.write(moov.read())
 
     # Write the rest
-    written = 0
     atoms = [item for item in index if item.name not in ["ftyp", "moov", "free"]]
     for atom in atoms:
         datastream.seek(atom.position)
 
-        # Write in chunks to not use too much memory
-        for x in range(atom.size // CHUNK_SIZE):
-            outfile.write(datastream.read(CHUNK_SIZE))
-            written += CHUNK_SIZE
-            if limit and written >= limit:
-                # A limit was set and we've just passed it, stop writing!
-                break
+        # for compatability, allow '0' to mean no limit
+        limit = limit or float('inf')
+        limit = min(limit, atom.size)
 
-        if atom.size % CHUNK_SIZE:
-            outfile.write(datastream.read(atom.size % CHUNK_SIZE))
-            written += (atom.size % CHUNK_SIZE)
-            if limit and written >= limit:
-                # A limit was set and we've just passed it, stop writing!
-                break
+        for chunk in get_chunks(datastream, CHUNK_SIZE, limit):
+            outfile.write(chunk)
+
+def get_chunks(stream, chunk_size, limit):
+    remaining = limit
+    while remaining:
+        chunk = stream.read(min(remaining, chunk_size))
+        if not chunk:
+            return
+        remaining -= len(chunk)
+        yield chunk
