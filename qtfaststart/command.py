@@ -1,11 +1,5 @@
-#!/usr/bin/env python
 
-"""
-    Command line script for convenience. If this is in your path, you should
-    be able to run it directly like this::
-
-        qtfaststart
-"""
+from __future__ import print_function
 
 import logging
 import os
@@ -55,14 +49,14 @@ def run():
                 # an empty string
                 atom = "----"
 
-            print atom, "(" + str(size) + " bytes)"
+            print(atom, "(" + str(size) + " bytes)")
 
         raise SystemExit
 
     if len(args) == 1:
         # Replace the original file!
         if options.sample:
-            print "Please pass an output filename when used with --sample!"
+            print("Please pass an output filename when used with --sample!")
             raise SystemExit(1)
 
         tmp, outfile = tempfile.mkstemp()
