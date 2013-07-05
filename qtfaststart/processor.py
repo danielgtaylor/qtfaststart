@@ -193,29 +193,7 @@ def process(infilename, outfilename, limit=float('inf')):
             raise FastStartException()
 
     # Read and fix moov
-    datastream.seek(moov_atom.position)
-    moov = io.BytesIO(datastream.read(moov_atom.size))
-
-    # reload the moov_atom from the fixed stream
-    moov_atom = _read_atom_ex(moov)
-
-    for atom in _find_atoms_ex(moov_atom, moov):
-        # Read either 32-bit or 64-bit offsets
-        ctype, csize = atom.name == "stco" and ("L", 4) or ("Q", 8)
-
-        # Get number of entries
-        version, entry_count = struct.unpack(">2L", moov.read(8))
-
-        log.info("Patching %s with %d entries" % (atom.name, entry_count))
-
-        # Read entries
-        entries = struct.unpack(">" + ctype * entry_count,
-                                moov.read(csize * entry_count))
-
-        # Patch and write entries
-        moov.seek(-csize * entry_count, os.SEEK_CUR)
-        moov.write(struct.pack(">" + ctype * entry_count,
-                               *[entry + offset for entry in entries]))
+    moov = _patch_moov(datastream, moov_atom, offset)
 
     log.info("Writing output...")
     outfile = open(outfilename, "wb")
@@ -240,6 +218,32 @@ def process(infilename, outfilename, limit=float('inf')):
 
         for chunk in get_chunks(datastream, CHUNK_SIZE, limit):
             outfile.write(chunk)
+
+def _patch_moov(datastream, atom, offset):
+    datastream.seek(atom.position)
+    moov = io.BytesIO(datastream.read(atom.size))
+
+    # reload the atom from the fixed stream
+    atom = _read_atom_ex(moov)
+
+    for atom in _find_atoms_ex(atom, moov):
+        # Read either 32-bit or 64-bit offsets
+        ctype, csize = atom.name == "stco" and ("L", 4) or ("Q", 8)
+
+        # Get number of entries
+        version, entry_count = struct.unpack(">2L", moov.read(8))
+
+        log.info("Patching %s with %d entries" % (atom.name, entry_count))
+
+        # Read entries
+        entries = struct.unpack(">" + ctype * entry_count,
+                                moov.read(csize * entry_count))
+
+        # Patch and write entries
+        moov.seek(-csize * entry_count, os.SEEK_CUR)
+        moov.write(struct.pack(">" + ctype * entry_count,
+                               *[entry + offset for entry in entries]))
+    return moov
 
 def get_chunks(stream, chunk_size, limit):
     remaining = limit
