@@ -5,7 +5,8 @@ except ImportError:
 
 import qtfaststart
 
-long_description = open('README.txt').read()
+with open('README.txt') as readme:
+    long_description = readme.read()
 
 setup(
     name='qtfaststart',
