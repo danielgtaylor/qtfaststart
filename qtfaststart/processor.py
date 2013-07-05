@@ -107,17 +107,26 @@ def _ensure_valid_index(index):
 
 def find_atoms(size, datastream):
     """
-        Yield either "stco" or "co64" chunks from datastream.
+    Compatibilty interface for _find_atoms_ex
+    """
+    fake_parent = Atom('fake', datastream.tell()-8, size+8)
+    for atom in _find_atoms_ex(fake_parent, datastream):
+        yield atom.name
+
+
+def _find_atoms_ex(parent_atom, datastream):
+    """
+        Yield either "stco" or "co64" Atoms from datastream.
         datastream will be 8 bytes into the stco or co64 atom when the value
         is yielded.
 
         It is assumed that datastream will be at the end of the atom after
         the value has been yielded and processed.
 
-        size is the number of bytes to the end of the parent atom in the
-        datastream.
+        parent_atom is the parent atom, a 'moov' or other ancestor of CO
+        atoms in the datastream.
     """
-    stop = datastream.tell() + size
+    stop = parent_atom.position + parent_atom.size
 
     while datastream.tell() < stop:
         try:
@@ -128,13 +137,13 @@ def find_atoms(size, datastream):
 
         if atom.name in ["trak", "mdia", "minf", "stbl"]:
             # Known ancestor atom of stco or co64, search within it!
-            for res in find_atoms(atom.size - 8, datastream):
+            for res in _find_atoms_ex(atom, datastream):
                 yield res
         elif atom.name in ["stco", "co64"]:
-            yield atom.name
+            yield atom
         else:
             # Ignore this atom, seek to the end of it.
-            datastream.seek(atom.size - 8, os.SEEK_CUR)
+            datastream.seek(atom.position + atom.size)
 
 
 def process(infilename, outfilename, limit=0):
