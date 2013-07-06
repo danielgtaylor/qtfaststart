@@ -1,9 +1,14 @@
-from distutils.core import setup
+try:
+    from setuptools import setup
+except ImportError:
+    from distutils.core import setup
+
 import qtfaststart
 
-long_description = open('README.txt').read()
+with open('README.txt') as readme:
+    long_description = readme.read()
 
-setup(
+setup_params = dict(
     name='qtfaststart',
     version=qtfaststart.VERSION,
     description='Quicktime atom positioning in Python for fast streaming.',
@@ -29,3 +34,6 @@ setup(
         'Topic :: Software Development :: Libraries :: Python Modules',
     ],
 )
+
+if __name__ == '__main__':
+    setup(**setup_params)

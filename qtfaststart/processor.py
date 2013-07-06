@@ -6,8 +6,9 @@
 import logging
 import os
 import struct
+import collections
 
-from StringIO import StringIO
+import io
 
 from qtfaststart.exceptions import FastStartException
 
@@ -19,13 +20,28 @@ log = logging.getLogger("qtfaststart")
 if not hasattr(os, 'SEEK_CUR'):
     os.SEEK_CUR = 1
 
+Atom = collections.namedtuple('Atom', 'name position size')
+
 def read_atom(datastream):
     """
         Read an atom and return a tuple of (size, type) where size is the size
         in bytes (including the 8 bytes already read) and type is a "fourcc"
         like "ftyp" or "moov".
     """
-    return struct.unpack(">L4s", datastream.read(8))
+    size, type = struct.unpack(">L4s", datastream.read(8))
+    type = type.decode('ascii')
+    return size, type
+
+
+def _read_atom_ex(datastream):
+    """
+    Read an Atom from datastream
+    """
+    pos = datastream.tell()
+    atom_size, atom_type = read_atom(datastream)
+    if atom_size == 1:
+        atom_size, = struct.unpack(">Q", datastream.read(8))
+    return Atom(atom_type, pos, atom_size)
 
 
 def get_index(datastream):
@@ -42,78 +58,95 @@ def get_index(datastream):
 
         The tuple elements will be in the order that they appear in the file.
     """
-    index = []
-
     log.debug("Getting index of top level atoms...")
 
-    # Read atoms until we catch an error
-    while(datastream):
+    index = list(_read_atoms(datastream))
+    _ensure_valid_index(index)
+
+    return index
+
+
+def _read_atoms(datastream):
+    """
+    Read atoms until an error occurs
+    """
+    while datastream:
         try:
-            skip = 8
-            atom_size, atom_type = read_atom(datastream)
-            if atom_size == 1:
-                atom_size = struct.unpack(">Q", datastream.read(8))[0]
-                skip = 16
-            log.debug("%s: %s" % (atom_type, atom_size))
+            atom = _read_atom_ex(datastream)
+            log.debug("%s: %s" % (atom.name, atom.size))
         except:
             break
 
-        index.append((atom_type, datastream.tell() - skip, atom_size))
+        yield atom
 
-        if atom_size == 0:
-            if atom_type == "mdat":
+        if atom.size == 0:
+            if atom.name == "mdat":
                 # Some files may end in mdat with no size set, which generally
                 # means to seek to the end of the file. We can just stop indexing
                 # as no more entries will be found!
                 break
             else:
                 # Weird, but just continue to try to find more atoms
-                atom_size = skip
+                continue
 
-        datastream.seek(atom_size - skip, os.SEEK_CUR)
+        datastream.seek(atom.position + atom.size)
 
-    # Make sure the atoms we need exist
-    top_level_atoms = set([item[0] for item in index])
+
+def _ensure_valid_index(index):
+    """
+    Ensure the minimum viable atoms are present in the index.
+
+    Raise FastStartException if not.
+    """
+    top_level_atoms = set([item.name for item in index])
     for key in ["moov", "mdat"]:
         if key not in top_level_atoms:
             log.error("%s atom not found, is this a valid MOV/MP4 file?" % key)
             raise FastStartException()
 
-    return index
-
 
 def find_atoms(size, datastream):
     """
-        This function is a generator that will yield either "stco" or "co64"
-        when either atom is found. datastream can be assumed to be 8 bytes
-        into the stco or co64 atom when the value is yielded.
+    Compatibilty interface for _find_atoms_ex
+    """
+    fake_parent = Atom('fake', datastream.tell()-8, size+8)
+    for atom in _find_atoms_ex(fake_parent, datastream):
+        yield atom.name
+
+
+def _find_atoms_ex(parent_atom, datastream):
+    """
+        Yield either "stco" or "co64" Atoms from datastream.
+        datastream will be 8 bytes into the stco or co64 atom when the value
+        is yielded.
 
         It is assumed that datastream will be at the end of the atom after
         the value has been yielded and processed.
 
-        size is the number of bytes to the end of the atom in the datastream.
+        parent_atom is the parent atom, a 'moov' or other ancestor of CO
+        atoms in the datastream.
     """
-    stop = datastream.tell() + size
+    stop = parent_atom.position + parent_atom.size
 
     while datastream.tell() < stop:
         try:
-            atom_size, atom_type = read_atom(datastream)
+            atom = _read_atom_ex(datastream)
         except:
             log.exception("Error reading next atom!")
             raise FastStartException()
 
-        if atom_type in ["trak", "mdia", "minf", "stbl"]:
+        if atom.name in ["trak", "mdia", "minf", "stbl"]:
             # Known ancestor atom of stco or co64, search within it!
-            for atype in find_atoms(atom_size - 8, datastream):
-                yield atype
-        elif atom_type in ["stco", "co64"]:
-            yield atom_type
+            for res in _find_atoms_ex(atom, datastream):
+                yield res
+        elif atom.name in ["stco", "co64"]:
+            yield atom
         else:
             # Ignore this atom, seek to the end of it.
-            datastream.seek(atom_size - 8, os.SEEK_CUR)
+            datastream.seek(atom.position + atom.size)
 
 
-def process(infilename, outfilename, limit=0):
+def process(infilename, outfilename, limit=float('inf')):
     """
         Convert a Quicktime/MP4 file for streaming by moving the metadata to
         the front of the file. This method writes a new file.
@@ -132,88 +165,97 @@ def process(infilename, outfilename, limit=0):
     free_size = 0
 
     # Make sure moov occurs AFTER mdat, otherwise no need to run!
-    for atom, pos, size in index:
+    for atom in index:
         # The atoms are guaranteed to exist from get_index above!
-        if atom == "moov":
-            moov_pos = pos
-            moov_size = size
-        elif atom == "mdat":
-            mdat_pos = pos
-        elif atom == "free" and pos < mdat_pos:
+        if atom.name == "moov":
+            moov_atom = atom
+            moov_pos = atom.position
+        elif atom.name == "mdat":
+            mdat_pos = atom.position
+        elif atom.name == "free" and atom.position < mdat_pos:
             # This free atom is before the mdat!
-            free_size += size
-            log.info("Removing free atom at %d (%d bytes)" % (pos, size))
-        elif atom == "\x00\x00\x00\x00" and pos < mdat_pos:
+            free_size += atom.size
+            log.info("Removing free atom at %d (%d bytes)" % (atom.position, atom.size))
+        elif atom.name == "\x00\x00\x00\x00" and atom.position < mdat_pos:
             # This is some strange zero atom with incorrect size
             free_size += 8
-            log.info("Removing strange zero atom at %s (8 bytes)" % pos)
+            log.info("Removing strange zero atom at %s (8 bytes)" % atom.position)
 
     # Offset to shift positions
-    offset = moov_size - free_size
+    offset = moov_atom.size - free_size
 
     if moov_pos < mdat_pos:
         # moov appears to be in the proper place, don't shift by moov size
-        offset -= moov_size
+        offset -= moov_atom.size
         if not free_size:
             # No free atoms and moov is correct, we are done!
             log.error("This file appears to already be setup for streaming!")
             raise FastStartException()
 
     # Read and fix moov
-    datastream.seek(moov_pos)
-    moov = StringIO(datastream.read(moov_size))
-
-    # Ignore moov identifier and size, start reading children
-    moov.seek(8)
-
-    for atom_type in find_atoms(moov_size - 8, moov):
-        # Read either 32-bit or 64-bit offsets
-        ctype, csize = atom_type == "stco" and ("L", 4) or ("Q", 8)
-
-        # Get number of entries
-        version, entry_count = struct.unpack(">2L", moov.read(8))
-
-        log.info("Patching %s with %d entries" % (atom_type, entry_count))
-
-        # Read entries
-        entries = struct.unpack(">" + ctype * entry_count,
-                                moov.read(csize * entry_count))
-
-        # Patch and write entries
-        moov.seek(-csize * entry_count, os.SEEK_CUR)
-        moov.write(struct.pack(">" + ctype * entry_count,
-                               *[entry + offset for entry in entries]))
+    moov = _patch_moov(datastream, moov_atom, offset)
 
     log.info("Writing output...")
     outfile = open(outfilename, "wb")
 
     # Write ftype
-    for atom, pos, size in index:
-        if atom == "ftyp":
-            datastream.seek(pos)
-            outfile.write(datastream.read(size))
+    for atom in index:
+        if atom.name == "ftyp":
+            datastream.seek(atom.position)
+            outfile.write(datastream.read(atom.size))
 
     # Write moov
-    moov.seek(0)
-    outfile.write(moov.read())
+    outfile.write(moov.getvalue())
 
     # Write the rest
-    written = 0
-    atoms = [item for item in index if item[0] not in ["ftyp", "moov", "free"]]
-    for atom, pos, size in atoms:
-        datastream.seek(pos)
+    atoms = [item for item in index if item.name not in ["ftyp", "moov", "free"]]
+    for atom in atoms:
+        datastream.seek(atom.position)
 
-        # Write in chunks to not use too much memory
-        for x in range(size / CHUNK_SIZE):
-            outfile.write(datastream.read(CHUNK_SIZE))
-            written += CHUNK_SIZE
-            if limit and written >= limit:
-                # A limit was set and we've just passed it, stop writing!
-                break
+        # for compatability, allow '0' to mean no limit
+        limit = limit or float('inf')
+        limit = min(limit, atom.size)
 
-        if size % CHUNK_SIZE:
-            outfile.write(datastream.read(size % CHUNK_SIZE))
-            written += (size % CHUNK_SIZE)
-            if limit and written >= limit:
-                # A limit was set and we've just passed it, stop writing!
-                break
+        for chunk in get_chunks(datastream, CHUNK_SIZE, limit):
+            outfile.write(chunk)
+
+def _patch_moov(datastream, atom, offset):
+    datastream.seek(atom.position)
+    moov = io.BytesIO(datastream.read(atom.size))
+
+    # reload the atom from the fixed stream
+    atom = _read_atom_ex(moov)
+
+    for atom in _find_atoms_ex(atom, moov):
+        # Read either 32-bit or 64-bit offsets
+        ctype, csize = dict(
+            stco=('L', 4),
+            co64=('Q', 8),
+        )[atom.name]
+
+        # Get number of entries
+        version, entry_count = struct.unpack(">2L", moov.read(8))
+
+        log.info("Patching %s with %d entries" % (atom.name, entry_count))
+
+        entries_pos = moov.tell()
+
+        struct_fmt = ">%(entry_count)s%(ctype)s" % vars()
+
+        # Read entries
+        entries = struct.unpack(struct_fmt, moov.read(csize * entry_count))
+
+        # Patch and write entries
+        offset_entries = [entry + offset for entry in entries]
+        moov.seek(entries_pos)
+        moov.write(struct.pack(struct_fmt, *offset_entries))
+    return moov
+
+def get_chunks(stream, chunk_size, limit):
+    remaining = limit
+    while remaining:
+        chunk = stream.read(min(remaining, chunk_size))
+        if not chunk:
+            return
+        remaining -= len(chunk)
+        yield chunk
