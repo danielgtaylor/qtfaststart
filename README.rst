@@ -15,7 +15,7 @@ user friendly, and to use less actual lines of code doing so.
 Features
 --------
 
-    * Works everywhere Python can be installed
+    * Works everywhere Python (2.6+) can be installed
     * Handles both 32-bit (stco) and 64-bit (co64) atoms
     * Handles any file where the mdat atom is before the moov atom
     * Preserves the order of other atoms
@@ -54,8 +54,19 @@ To see a list of top-level atoms and their order in the file::
 
     $ bin/qtfaststart --list infile
 
+If on Windows, the qtfaststart script will not execute, so use::
+
+    > python -m qtfaststart ...
+
 History
 -------
+    * 2013-07-05: Introduced Python 3 support.
+    * 2013-07-05: Added launcher via 'python -m qtfaststart'.
+    * 2013-07-05: Internal refactoring for clarity and robustness. Functions
+      now work with named tuples. Backward compatability is maintained. Expect
+      a future, backward-incompatible release to replace other functions.
+    * 2013-07-05: Created an ``Atom`` namedtuple to represent a fourcc atom
+      (name, stream position, and size).
     * 2013-01-28: Support strange zero-name, zero-length atoms, re-license
       under the MIT license, version bump to 1.7
     * 2011-11-01: Fix long-standing os.SEEK_CUR bug, version bump to 1.6
@@ -66,7 +77,7 @@ History
     * 2009-11-05: Added --sample option. Version bump to 1.3
     * 2009-03-13: Update to be more library-friendly by using logging module,
       rename fast_start => process, version bump to 1.2
-    * 2008-10-04: Bug fixes, support multiple atoms of the same type, 
+    * 2008-10-04: Bug fixes, support multiple atoms of the same type,
       version bump to 1.1
     * 2008-09-02: Initial release
 
