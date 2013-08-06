@@ -60,6 +60,7 @@ If on Windows, the qtfaststart script will not execute, so use::
 
 History
 -------
+    * 2013-08-06: Fix a bug producing 8kb mdat output.
     * 2013-07-05: Introduced Python 3 support.
     * 2013-07-05: Added launcher via 'python -m qtfaststart'.
     * 2013-07-05: Internal refactoring for clarity and robustness. Functions
