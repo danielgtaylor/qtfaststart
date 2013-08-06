@@ -213,10 +213,10 @@ def process(infilename, outfilename, limit=float('inf')):
         datastream.seek(atom.position)
 
         # for compatability, allow '0' to mean no limit
-        limit = limit or float('inf')
-        limit = min(limit, atom.size)
+        cur_limit = limit or float('inf')
+        cur_limit = min(cur_limit, atom.size)
 
-        for chunk in get_chunks(datastream, CHUNK_SIZE, limit):
+        for chunk in get_chunks(datastream, CHUNK_SIZE, cur_limit):
             outfile.write(chunk)
 
 def _patch_moov(datastream, atom, offset):
