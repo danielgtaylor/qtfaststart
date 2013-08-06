@@ -201,15 +201,19 @@ def process(infilename, outfilename, limit=float('inf')):
     # Write ftype
     for atom in index:
         if atom.name == "ftyp":
+            log.debug("Writing ftyp... (%d bytes)" % atom.size)
             datastream.seek(atom.position)
             outfile.write(datastream.read(atom.size))
 
     # Write moov
-    outfile.write(moov.getvalue())
+    bytes = moov.getvalue()
+    log.debug("Writing moov... (%d bytes)" % len(bytes))
+    outfile.write(bytes)
 
     # Write the rest
     atoms = [item for item in index if item.name not in ["ftyp", "moov", "free"]]
     for atom in atoms:
+        log.debug("Writing %s... (%d bytes)" % (atom.name, atom.size))
         datastream.seek(atom.position)
 
         # for compatability, allow '0' to mean no limit
