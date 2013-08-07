@@ -3,6 +3,7 @@
     'qtfaststart' script and for your application's direct use.
 """
 
+import shutil
 import logging
 import os
 import struct
@@ -222,6 +223,13 @@ def process(infilename, outfilename, limit=float('inf')):
 
         for chunk in get_chunks(datastream, CHUNK_SIZE, cur_limit):
             outfile.write(chunk)
+
+    # Close and set permissions
+    outfile.close()
+    try:
+        shutil.copymode(infilename, outfilename)
+    except:
+        log.warn("Could not copy file permissions!")
 
 def _patch_moov(datastream, atom, offset):
     datastream.seek(atom.position)
