@@ -27,6 +27,9 @@ def run():
     parser.add_option("-l", "--list", dest="list", default=False,
                       action="store_true",
                       help="List top level atoms")
+    parser.add_option("-e", "--to_end", dest="to_end", default=False,
+                      action="store_true",
+                      help="Move moov atom to the end of file")
     parser.add_option("-s", "--sample", dest="sample", default=False,
                       action="store_true",
                       help="Create a small sample of the input file")
@@ -70,7 +73,7 @@ def run():
         limit = 4 * (1024 ** 2)
 
     try:
-        processor.process(args[0], outfile, limit = limit)
+        processor.process(args[0], outfile, limit = limit, to_end = options.to_end)
     except FastStartException:
         # A log message was printed, so exit with an error code
         raise SystemExit(1)
