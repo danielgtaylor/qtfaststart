@@ -147,7 +147,7 @@ def _find_atoms_ex(parent_atom, datastream):
             datastream.seek(atom.position + atom.size)
 
 
-def process(infilename, outfilename, limit=float('inf')):
+def process(infilename, outfilename, limit=float('inf'), to_end=False):
     """
         Convert a Quicktime/MP4 file for streaming by moving the metadata to
         the front of the file. This method writes a new file.
@@ -183,15 +183,20 @@ def process(infilename, outfilename, limit=float('inf')):
             log.info("Removing strange zero atom at %s (8 bytes)" % atom.position)
 
     # Offset to shift positions
-    offset = moov_atom.size - free_size
-
+    offset = - free_size
     if moov_pos < mdat_pos:
-        # moov appears to be in the proper place, don't shift by moov size
-        offset -= moov_atom.size
-        if not free_size:
-            # No free atoms and moov is correct, we are done!
-            log.error("This file appears to already be setup for streaming!")
-            raise FastStartException()
+        if to_end:
+            # moov is in the wrong place, shift by moov size
+            offset -= moov_atom.size
+    else:
+        if not to_end:
+            # moov is in the wrong place, shift by moov size
+            offset += moov_atom.size
+
+    if offset == 0:
+        # No free atoms and moov is correct, we are done!
+        log.error("This file appears to already be setup!")
+        raise FastStartException()
 
     # Read and fix moov
     moov = _patch_moov(datastream, moov_atom, offset)
@@ -206,10 +211,8 @@ def process(infilename, outfilename, limit=float('inf')):
             datastream.seek(atom.position)
             outfile.write(datastream.read(atom.size))
 
-    # Write moov
-    bytes = moov.getvalue()
-    log.debug("Writing moov... (%d bytes)" % len(bytes))
-    outfile.write(bytes)
+    if not to_end:
+        _write_moov(moov, outfile)
 
     # Write the rest
     atoms = [item for item in index if item.name not in ["ftyp", "moov", "free"]]
@@ -224,12 +227,21 @@ def process(infilename, outfilename, limit=float('inf')):
         for chunk in get_chunks(datastream, CHUNK_SIZE, cur_limit):
             outfile.write(chunk)
 
+    if to_end:
+        _write_moov(moov, outfile)
+
     # Close and set permissions
     outfile.close()
     try:
         shutil.copymode(infilename, outfilename)
     except:
         log.warn("Could not copy file permissions!")
+
+def _write_moov(moov, outfile):
+    # Write moov
+    bytes = moov.getvalue()
+    log.debug("Writing moov... (%d bytes)" % len(bytes))
+    outfile.write(bytes)
 
 def _patch_moov(datastream, atom, offset):
     datastream.seek(atom.position)
