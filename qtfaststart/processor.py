@@ -102,7 +102,7 @@ def _ensure_valid_index(index):
     top_level_atoms = set([item.name for item in index])
     for key in ["moov", "mdat"]:
         if key not in top_level_atoms:
-            log.error("%s atom not found, is this a valid MOV/MP4 file?" % key)
+            log.warn("%s atom not found, is this a valid MOV/MP4 file?" % key)
             raise FastStartException()
 
 
