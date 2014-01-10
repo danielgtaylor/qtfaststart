@@ -102,8 +102,9 @@ def _ensure_valid_index(index):
     top_level_atoms = set([item.name for item in index])
     for key in ["moov", "mdat"]:
         if key not in top_level_atoms:
-            log.warn("%s atom not found, is this a valid MOV/MP4 file?" % key)
-            raise FastStartException()
+            msg = "%s atom not found, is this a valid MOV/MP4 file?" % key
+            log.warn(msg)
+            raise MalformedFileError(msg)
 
 
 def find_atoms(size, datastream):
@@ -133,8 +134,9 @@ def _find_atoms_ex(parent_atom, datastream):
         try:
             atom = _read_atom_ex(datastream)
         except:
-            log.exception("Error reading next atom!")
-            raise FastStartException()
+            msg = "Error reading next atom!"
+            log.exception(msg)
+            raise MalformedFileError(msg)
 
         if atom.name in ["trak", "mdia", "minf", "stbl"]:
             # Known ancestor atom of stco or co64, search within it!
@@ -195,8 +197,9 @@ def process(infilename, outfilename, limit=float('inf'), to_end=False):
 
     if offset == 0:
         # No free atoms and moov is correct, we are done!
-        log.error("This file appears to already be setup!")
-        raise FastStartException()
+        msg = "This file appears to already be setup!"
+        log.error(msg)
+        raise FastStartSetupError(msg)
 
     # Read and fix moov
     moov = _patch_moov(datastream, moov_atom, offset)
