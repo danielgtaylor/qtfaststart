@@ -16,3 +16,8 @@ class MalformedFileError(FastStartException):
     """
     pass
 
+class UnsupportedFormatError(FastStartException):
+    """
+    Raised when a movie file is recognized as a format not supported.
+    """
+    pass

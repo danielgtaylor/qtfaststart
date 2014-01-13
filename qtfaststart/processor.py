@@ -11,7 +11,7 @@ import collections
 
 import io
 
-from qtfaststart.exceptions import FastStartException
+from qtfaststart.exceptions import *
 
 CHUNK_SIZE = 8192
 
@@ -148,8 +148,28 @@ def _find_atoms_ex(parent_atom, datastream):
             # Ignore this atom, seek to the end of it.
             datastream.seek(atom.position + atom.size)
 
+def _moov_is_compressed(datastream, moov_atom):
+    """
+        scan the atoms under the moov atom and detect whether or not the
+        atom data is compressed
+    """
+    # seek to the beginning of the moov atom contents
+    datastream.seek(moov_atom.position+8)
+    
+    # step through the moov atom childeren to see if a cmov atom is among them
+    stop = moov_atom.position + moov_atom.size
+    while datastream.tell() < stop:
+        child_atom = _read_atom_ex(datastream)
+        datastream.seek(datastream.tell()+child_atom.size - 8)
+        
+        # cmov means compressed moov header!
+        if child_atom.name == 'cmov':
+            return True
+    
+    return False
 
-def process(infilename, outfilename, limit=float('inf'), to_end=False):
+def process(infilename, outfilename, limit=float('inf'), to_end=False, 
+        cleanup=True):
     """
         Convert a Quicktime/MP4 file for streaming by moving the metadata to
         the front of the file. This method writes a new file.
@@ -158,6 +178,9 @@ def process(infilename, outfilename, limit=float('inf'), to_end=False):
         number of bytes to write of the atoms following the moov atom. This
         is very useful to create a small sample of a file with full headers,
         which can then be used in bug reports and such.
+
+        If cleanup is set to False, free atoms and zero atoms will not be
+        scrubbed from from the mov
     """
     datastream = open(infilename, "rb")
 
@@ -175,15 +198,17 @@ def process(infilename, outfilename, limit=float('inf'), to_end=False):
             moov_pos = atom.position
         elif atom.name == "mdat":
             mdat_pos = atom.position
-        elif atom.name == "free" and atom.position < mdat_pos:
+        elif atom.name == "free" and atom.position < mdat_pos and cleanup:
             # This free atom is before the mdat!
             free_size += atom.size
-            log.info("Removing free atom at %d (%d bytes)" % (atom.position, atom.size))
-        elif atom.name == "\x00\x00\x00\x00" and atom.position < mdat_pos:
+            log.info("Removing free atom at %d (%d bytes)" %
+                    (atom.position, atom.size))
+        elif (atom.name == "\x00\x00\x00\x00" and atom.position < mdat_pos):
             # This is some strange zero atom with incorrect size
             free_size += 8
-            log.info("Removing strange zero atom at %s (8 bytes)" % atom.position)
-
+            log.info("Removing strange zero atom at %s (8 bytes)" %
+                    atom.position)
+    
     # Offset to shift positions
     offset = - free_size
     if moov_pos < mdat_pos:
@@ -194,14 +219,20 @@ def process(infilename, outfilename, limit=float('inf'), to_end=False):
         if not to_end:
             # moov is in the wrong place, shift by moov size
             offset += moov_atom.size
-
     if offset == 0:
-        # No free atoms and moov is correct, we are done!
+        # No free atoms to process and moov is correct, we are done!
         msg = "This file appears to already be setup!"
         log.error(msg)
         raise FastStartSetupError(msg)
 
-    # Read and fix moov
+    # Check for compressed moov atom
+    is_compressed = _moov_is_compressed(datastream, moov_atom)
+    if is_compressed:
+        msg = "Movies with compressed headers are not supported"
+        log.error(msg)
+        raise UnsupportedFormatError(msg)
+
+    # read and fix moov
     moov = _patch_moov(datastream, moov_atom, offset)
 
     log.info("Writing output...")
@@ -213,12 +244,16 @@ def process(infilename, outfilename, limit=float('inf'), to_end=False):
             log.debug("Writing ftyp... (%d bytes)" % atom.size)
             datastream.seek(atom.position)
             outfile.write(datastream.read(atom.size))
-
+    
     if not to_end:
         _write_moov(moov, outfile)
 
     # Write the rest
-    atoms = [item for item in index if item.name not in ["ftyp", "moov", "free"]]
+    skip_atom_types = ["ftyp", "moov"]
+    if cleanup:
+        skip_atom_types += ["free"]
+    
+    atoms = [item for item in index if item.name not in skip_atom_types]
     for atom in atoms:
         log.debug("Writing %s... (%d bytes)" % (atom.name, atom.size))
         datastream.seek(atom.position)
