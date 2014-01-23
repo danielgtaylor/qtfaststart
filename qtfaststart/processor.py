@@ -11,7 +11,13 @@ import collections
 
 import io
 
-from qtfaststart.exceptions import *
+from qtfaststart.exceptions import FastStartSetupError
+from qtfaststart.exceptions import MalformedFileError
+from qtfaststart.exceptions import UnsupportedFormatError
+
+# This exception isn't directly used, included it for backward compatability
+# in the event someone had used it from our namespace previously
+from qtfaststart.exceptions import FastStartException
 
 CHUNK_SIZE = 8192
 
@@ -97,7 +103,7 @@ def _ensure_valid_index(index):
     """
     Ensure the minimum viable atoms are present in the index.
 
-    Raise FastStartException if not.
+    Raise MalformedFileError if not.
     """
     top_level_atoms = set([item.name for item in index])
     for key in ["moov", "mdat"]:
@@ -208,7 +214,7 @@ def process(infilename, outfilename, limit=float('inf'), to_end=False,
             free_size += 8
             log.info("Removing strange zero atom at %s (8 bytes)" %
                     atom.position)
-    
+
     # Offset to shift positions
     offset = - free_size
     if moov_pos < mdat_pos:
@@ -219,6 +225,7 @@ def process(infilename, outfilename, limit=float('inf'), to_end=False,
         if not to_end:
             # moov is in the wrong place, shift by moov size
             offset += moov_atom.size
+
     if offset == 0:
         # No free atoms to process and moov is correct, we are done!
         msg = "This file appears to already be setup!"
@@ -244,7 +251,7 @@ def process(infilename, outfilename, limit=float('inf'), to_end=False,
             log.debug("Writing ftyp... (%d bytes)" % atom.size)
             datastream.seek(atom.position)
             outfile.write(datastream.read(atom.size))
-    
+ 
     if not to_end:
         _write_moov(moov, outfile)
 
